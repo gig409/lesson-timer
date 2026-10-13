@@ -58,6 +58,32 @@
   .sw[aria-pressed="true"] { color: var(--btn-fg); border-color: var(--accent); }
   .sw[aria-pressed="false"] .slash { display: inline; }
   .sw[aria-pressed="false"] .lbl { text-decoration: line-through; }
+
+  /* main buttons: text at full size, icons when small */
+  .controls { display: flex; flex-direction: column; align-items: center; gap: 2.6cqmin; }
+  .main { display: inline-flex; align-items: center; justify-content: center; gap: .4em; }
+  .main .ico { display: none; width: 1.1em; height: 1.1em; flex: none; }
+  #toggle:disabled { opacity: .6; cursor: default; }
+
+  /* compact layout: one row of icon-only buttons */
+  @container (max-width: 460px) or (max-height: 290px) {
+    .wrap { gap: 3cqmin; padding: 2cqmin; }
+    .label { font-size: clamp(10px, 7cqmin, 40px); }
+    .time { font-size: clamp(24px, min(36cqh, 30cqw), 400px); }
+    .controls { flex-direction: row; gap: 2.5cqmin; }
+    .row { gap: 2.5cqmin; flex-wrap: nowrap; }
+    .main .txt, .sw .lbl { display: none; }
+    .main, .sw {
+      font-size: clamp(11px, min(9cqh, 6.5cqw), 40px);
+      width: 2.3em; height: 2.3em; padding: 0; min-width: 0;
+      display: inline-flex; align-items: center; justify-content: center; border-radius: .55em;
+    }
+    #toggle { min-width: 0; width: 2.3em; }
+    .main .ico { display: block; }
+    #toggle .ico { display: none; }
+    #toggle[data-state="start"] .play, #toggle[data-state="pause"] .pause, #toggle[data-state="done"] .check { display: block; }
+    .sw svg { width: 1.15em; height: 1.15em; }
+  }
 </style>
 </head>
 <body>
@@ -65,19 +91,29 @@
   <div class="label" id="label" hidden></div>
   <div class="time" id="time" role="timer" aria-live="off">0:00</div>
   <div class="bar"><div class="fill" id="fill"></div></div>
+  <div class="controls">
   <div class="row">
-    <button id="toggle">Start</button>
-    <button id="reset">Reset</button>
+    <button id="toggle" class="main" data-state="start" aria-label="Start" title="Start (Space)">
+      <svg class="ico play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>
+      <svg class="ico pause" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1.2"/><rect x="14" y="4" width="5" height="16" rx="1.2"/></svg>
+      <svg class="ico check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+      <span class="txt" id="toggleTxt">Start</span>
+    </button>
+    <button id="reset" class="main" aria-label="Reset" title="Reset (R)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+      <span class="txt">Reset</span>
+    </button>
   </div>
   <div class="row">
-    <button class="sw" id="swEnd" aria-pressed="true" title="Alarm when time is up">
+    <button class="sw" id="swEnd" aria-pressed="true" aria-label="End alarm" title="Alarm when time is up">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><line class="slash" x1="3" y1="3" x2="21" y2="21"/></svg>
       <span class="lbl">End alarm</span>
     </button>
-    <button class="sw" id="swTick" aria-pressed="true" title="Ticking in the final seconds that speeds up">
+    <button class="sw" id="swTick" aria-pressed="true" aria-label="Final seconds ticking" title="Ticking in the final seconds that speeds up">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M9 2h6"/><line class="slash" x1="3" y1="3" x2="21" y2="21"/></svg>
       <span class="lbl" id="tickLbl">Last 30s ticks</span>
     </button>
+  </div>
   </div>
 </div>
 <script>
@@ -148,7 +184,11 @@ function render() {
   fill.style.width = (msLeft() / (total * 1000) * 100) + '%';
   wrap.classList.toggle('warn', left > 0 && left <= Math.min(Math.max(tickFrom, 60), total * 0.25 || 60));
   wrap.classList.toggle('done', left === 0);
-  toggle.textContent = loop ? 'Pause' : (left === 0 ? 'Done' : (left < total ? 'Resume' : 'Start'));
+  const word = loop ? 'Pause' : (left === 0 ? 'Done' : (left < total ? 'Resume' : 'Start'));
+  toggleTxt.textContent = word;
+  toggle.setAttribute('aria-label', word);
+  toggle.dataset.state = loop ? 'pause' : (left === 0 ? 'done' : 'start');
+  toggle.disabled = left === 0;
   swEnd.setAttribute('aria-pressed', endOn);
   swTick.setAttribute('aria-pressed', tickOn);
 }
