@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson Timer</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #111827; --muted: #6b7280; --track: #e5e7eb;
+    --accent: #2563eb; --warn: #d97706; --done: #dc2626; --btn: #f3f4f6; --btn-fg: #111827;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f172a; --fg: #f8fafc; --muted: #94a3b8; --track: #1e293b;
+    --accent: #60a5fa; --warn: #fbbf24; --done: #f87171; --btn: #1e293b; --btn-fg: #f8fafc;
+  }
+  :root[data-theme="clear"] { --bg: transparent; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    container-type: size;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; user-select: none;
+  }
+  .wrap { width: 100%; padding: 4cqmin; display: flex; flex-direction: column; align-items: center; gap: 3cqmin; }
+  .label { font-size: clamp(14px, 8cqmin, 64px); font-weight: 700; color: var(--muted); text-align: center; }
+  .time {
+    font-size: clamp(32px, min(34cqh, 26cqw), 400px);
+    font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+    color: var(--fg); transition: color .3s;
+  }
+  .warn .time { color: var(--warn); }
+  .done .time { color: var(--done); animation: pulse 1s ease-in-out 3; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .bar { width: min(90%, 900px); height: clamp(6px, 2.5cqmin, 20px); background: var(--track); border-radius: 999px; overflow: hidden; }
+  .fill { height: 100%; width: 100%; background: var(--accent); transition: width 1s linear, background .3s; }
+  .warn .fill { background: var(--warn); }
+  .done .fill { background: var(--done); }
+  .controls { display: flex; gap: 2cqmin; flex-wrap: wrap; justify-content: center; }
+  button {
+    font: inherit; font-weight: 700; font-size: clamp(12px, 6cqmin, 36px);
+    padding: .4em 1.1em; border-radius: .5em; border: 2px solid transparent;
+    background: var(--btn); color: var(--btn-fg); cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  #toggle { background: var(--accent); color: #fff; min-width: 5.5em; }
+  :root[data-theme="dark"] #toggle { color: #0f172a; }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="label" id="label" hidden></div>
+  <div class="time" id="time" role="timer" aria-live="off">0:00</div>
+  <div class="bar"><div class="fill" id="fill"></div></div>
+  <div class="controls">
+    <button id="toggle">Start</button>
+    <button id="reset">Reset</button>
+  </div>
+</div>
+<script>
+/*
+  URL options (all optional):
+    m=4          minutes (decimals ok, e.g. m=2.5)
+    s=30         extra seconds (added to m)
+    label=Do%20Now   text shown above the clock
+    sound=0      turn off the end beep (on by default)
+    theme=dark | clear   (clear = transparent background)
+    auto=1       start counting as soon as the page loads
+  Keyboard (when the timer has focus): Space = start/pause, R = reset
+*/
+const q = new URLSearchParams(location.search);
+const total = Math.max(1, Math.round((parseFloat(q.get('m')) || 0) * 60 + (parseFloat(q.get('s')) || 0)) || 300);
+const sound = q.get('sound') !== '0';
+if (q.get('theme')) document.documentElement.dataset.theme = q.get('theme');
+if (q.get('label')) { label.textContent = q.get('label'); label.hidden = false; document.title = q.get('label') + ' timer'; }
+
+let left = total, endAt = null, tick = null;
+const fmt = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+
+function render() {
+  time.textContent = fmt(left);
+  fill.style.width = (left / total * 100) + '%';
+  wrap.classList.toggle('warn', left > 0 && left <= Math.min(60, total * 0.25));
+  wrap.classList.toggle('done', left === 0);
+  toggle.textContent = tick ? 'Pause' : (left === 0 ? 'Done' : (left < total ? 'Resume' : 'Start'));
+}
+function start() {
+  if (tick || left === 0) return;
+  endAt = Date.now() + left * 1000;            // uses the clock, so it stays accurate if the tab is throttled
+  tick = setInterval(() => {
+    left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+    if (left === 0) { stop(); beep(); }
+    render();
+  }, 250);
+  render();
+}
+function stop() { clearInterval(tick); tick = null; render(); }
+function reset() { stop(); left = total; render(); }
+function beep() {
+  if (!sound) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.35, 0.7].forEach(t => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.25);
+      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.3);
+    });
+  } catch (e) {}
+}
+toggle.onclick = () => tick ? stop() : start();
+document.getElementById('reset').onclick = reset;
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); tick ? stop() : start(); }
+  if (e.key === 'r' || e.key === 'R') reset();
+});
+render();
+if (q.get('auto') === '1') start();
+</script>
+</body>
+</html>
