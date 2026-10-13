@@ -84,6 +84,23 @@
     #toggle[data-state="start"] .play, #toggle[data-state="pause"] .pause, #toggle[data-state="done"] .check { display: block; }
     .sw svg { width: 1.15em; height: 1.15em; }
   }
+  /* compact=1 in the URL forces icon mode at any size */
+  html.compact .wrap { gap: 3cqmin; padding: 2cqmin; }
+  html.compact .label { font-size: clamp(10px, 7cqmin, 40px); }
+  html.compact .time { font-size: clamp(24px, min(36cqh, 30cqw), 400px); }
+  html.compact .controls { flex-direction: row; gap: 2.5cqmin; }
+  html.compact .row { gap: 2.5cqmin; flex-wrap: nowrap; }
+  html.compact .main .txt, html.compact .sw .lbl { display: none; }
+  html.compact .main, html.compact .sw {
+      font-size: clamp(11px, min(9cqh, 6.5cqw), 40px);
+      width: 2.3em; height: 2.3em; padding: 0; min-width: 0;
+      display: inline-flex; align-items: center; justify-content: center; border-radius: .55em;
+    }
+  html.compact #toggle { min-width: 0; width: 2.3em; }
+  html.compact .main .ico { display: block; }
+  html.compact #toggle .ico { display: none; }
+  html.compact #toggle[data-state="start"] .play, html.compact #toggle[data-state="pause"] .pause, html.compact #toggle[data-state="done"] .check { display: block; }
+  html.compact .sw svg { width: 1.15em; height: 1.15em; }
 </style>
 </head>
 <body>
@@ -126,6 +143,7 @@
     ticks=0          start with the final-seconds ticking switched off
     tickfrom=30      when ticking starts, in seconds before the end (default 30)
     theme=dark | clear   (clear = transparent background)
+    compact=1        always use the small icon-only buttons
     auto=1           start counting as soon as the page loads
   Keyboard (after clicking the timer): Space = start/pause, R = reset
 */
@@ -134,6 +152,7 @@ const total = Math.max(1, Math.round((parseFloat(q.get('m')) || 0) * 60 + (parse
 const tickFrom = Math.max(5, parseFloat(q.get('tickfrom')) || 30);
 let endOn  = q.get('end') !== '0' && q.get('sound') !== '0';
 let tickOn = q.get('ticks') !== '0';
+if (q.get('compact') === '1') document.documentElement.classList.add('compact');
 if (q.get('theme')) document.documentElement.dataset.theme = q.get('theme');
 if (q.get('label')) { label.textContent = q.get('label'); label.hidden = false; document.title = q.get('label') + ' timer'; }
 tickLbl.textContent = `Last ${tickFrom}s ticks`;
