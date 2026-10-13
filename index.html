@@ -23,23 +23,23 @@
     display: flex; align-items: center; justify-content: center;
     overflow: hidden; user-select: none;
   }
-  .wrap { width: 100%; padding: 4cqmin; display: flex; flex-direction: column; align-items: center; gap: 3cqmin; }
-  .label { font-size: clamp(14px, 8cqmin, 64px); font-weight: 700; color: var(--muted); text-align: center; }
+  .wrap { width: 100%; padding: 3cqmin; display: flex; flex-direction: column; align-items: center; gap: 2.6cqmin; }
+  .label { font-size: clamp(14px, 7cqmin, 64px); font-weight: 700; color: var(--muted); text-align: center; }
   .time {
-    font-size: clamp(32px, min(34cqh, 26cqw), 400px);
+    font-size: clamp(32px, min(30cqh, 26cqw), 400px);
     font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
     color: var(--fg); transition: color .3s;
   }
   .warn .time { color: var(--warn); }
   .done .time { color: var(--done); animation: pulse 1s ease-in-out 3; }
   @keyframes pulse { 50% { opacity: .35; } }
-  .bar { width: min(90%, 900px); height: clamp(6px, 2.5cqmin, 20px); background: var(--track); border-radius: 999px; overflow: hidden; }
-  .fill { height: 100%; width: 100%; background: var(--accent); transition: width 1s linear, background .3s; }
+  .bar { width: min(90%, 900px); height: clamp(6px, 2.2cqmin, 20px); background: var(--track); border-radius: 999px; overflow: hidden; }
+  .fill { height: 100%; width: 100%; background: var(--accent); transition: width .25s linear, background .3s; }
   .warn .fill { background: var(--warn); }
   .done .fill { background: var(--done); }
-  .controls { display: flex; gap: 2cqmin; flex-wrap: wrap; justify-content: center; }
+  .row { display: flex; gap: 2cqmin; flex-wrap: wrap; justify-content: center; }
   button {
-    font: inherit; font-weight: 700; font-size: clamp(12px, 6cqmin, 36px);
+    font: inherit; font-weight: 700; font-size: clamp(12px, 5.5cqmin, 36px);
     padding: .4em 1.1em; border-radius: .5em; border: 2px solid transparent;
     background: var(--btn); color: var(--btn-fg); cursor: pointer;
   }
@@ -47,6 +47,17 @@
   button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   #toggle { background: var(--accent); color: #fff; min-width: 5.5em; }
   :root[data-theme="dark"] #toggle { color: #0f172a; }
+
+  /* sound switches */
+  .sw {
+    font-size: clamp(10px, 3.6cqmin, 22px); font-weight: 600; padding: .35em .8em;
+    display: inline-flex; align-items: center; gap: .45em; color: var(--muted);
+  }
+  .sw svg { width: 1.2em; height: 1.2em; flex: none; }
+  .sw .slash { display: none; }
+  .sw[aria-pressed="true"] { color: var(--btn-fg); border-color: var(--accent); }
+  .sw[aria-pressed="false"] .slash { display: inline; }
+  .sw[aria-pressed="false"] .lbl { text-decoration: line-through; }
 </style>
 </head>
 <body>
@@ -54,68 +65,117 @@
   <div class="label" id="label" hidden></div>
   <div class="time" id="time" role="timer" aria-live="off">0:00</div>
   <div class="bar"><div class="fill" id="fill"></div></div>
-  <div class="controls">
+  <div class="row">
     <button id="toggle">Start</button>
     <button id="reset">Reset</button>
+  </div>
+  <div class="row">
+    <button class="sw" id="swEnd" aria-pressed="true" title="Alarm when time is up">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><line class="slash" x1="3" y1="3" x2="21" y2="21"/></svg>
+      <span class="lbl">End alarm</span>
+    </button>
+    <button class="sw" id="swTick" aria-pressed="true" title="Ticking in the final seconds that speeds up">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M9 2h6"/><line class="slash" x1="3" y1="3" x2="21" y2="21"/></svg>
+      <span class="lbl" id="tickLbl">Last 30s ticks</span>
+    </button>
   </div>
 </div>
 <script>
 /*
   URL options (all optional):
-    m=4          minutes (decimals ok, e.g. m=2.5)
-    s=30         extra seconds (added to m)
+    m=4              minutes (decimals ok, e.g. m=2.5)
+    s=30             extra seconds (added to m)
     label=Do%20Now   text shown above the clock
-    sound=0      turn off the end beep (on by default)
+    end=0            start with the end alarm switched off   (sound=0 also works)
+    ticks=0          start with the final-seconds ticking switched off
+    tickfrom=30      when ticking starts, in seconds before the end (default 30)
     theme=dark | clear   (clear = transparent background)
-    auto=1       start counting as soon as the page loads
-  Keyboard (when the timer has focus): Space = start/pause, R = reset
+    auto=1           start counting as soon as the page loads
+  Keyboard (after clicking the timer): Space = start/pause, R = reset
 */
 const q = new URLSearchParams(location.search);
 const total = Math.max(1, Math.round((parseFloat(q.get('m')) || 0) * 60 + (parseFloat(q.get('s')) || 0)) || 300);
-const sound = q.get('sound') !== '0';
+const tickFrom = Math.max(5, parseFloat(q.get('tickfrom')) || 30);
+let endOn  = q.get('end') !== '0' && q.get('sound') !== '0';
+let tickOn = q.get('ticks') !== '0';
 if (q.get('theme')) document.documentElement.dataset.theme = q.get('theme');
 if (q.get('label')) { label.textContent = q.get('label'); label.hidden = false; document.title = q.get('label') + ' timer'; }
+tickLbl.textContent = `Last ${tickFrom}s ticks`;
 
-let left = total, endAt = null, tick = null;
+let left = total, endAt = null, loop = null, tickTimer = null, ctx = null;
 const fmt = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+const msLeft = () => endAt ? Math.max(0, endAt - Date.now()) : left * 1000;
 
+/* ---------- sound ---------- */
+function audio() {                       // created/resumed on a click, so browsers allow it
+  try {
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+  } catch (e) {}
+  return ctx;
+}
+function tone(freq, start, dur, vol, type = 'sine') {
+  if (!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + start;
+  o.type = type; o.frequency.value = freq; o.connect(g); g.connect(ctx.destination);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function endAlarm() {
+  window.__alarms = (window.__alarms || 0) + 1;
+  if (!endOn) return;
+  [0, 0.35, 0.7, 1.05].forEach(t => tone(880, t, 0.28, 0.45));
+}
+/* Ticks speed up as time runs out: ~1 per second at the start, ~6 per second at the end,
+   with the pitch rising too. */
+function tickLoop() {
+  tickTimer = null;
+  if (!loop) return;
+  const ms = msLeft();
+  if (ms <= 0) return;
+  if (ms > tickFrom * 1000) { tickTimer = setTimeout(tickLoop, ms - tickFrom * 1000); return; }
+  const p = 1 - ms / (tickFrom * 1000);            // 0 → 1 across the final window
+  if (tickOn) { tone(700 + 500 * p, 0, 0.05, 0.25 + 0.2 * p, 'square'); window.__ticks = (window.__ticks || 0) + 1; }
+  const gap = 1000 - 840 * p * p;                  // 1000ms → 160ms, accelerating
+  tickTimer = setTimeout(tickLoop, Math.min(gap, ms));
+}
+
+/* ---------- timer ---------- */
 function render() {
   time.textContent = fmt(left);
-  fill.style.width = (left / total * 100) + '%';
-  wrap.classList.toggle('warn', left > 0 && left <= Math.min(60, total * 0.25));
+  fill.style.width = (msLeft() / (total * 1000) * 100) + '%';
+  wrap.classList.toggle('warn', left > 0 && left <= Math.min(Math.max(tickFrom, 60), total * 0.25 || 60));
   wrap.classList.toggle('done', left === 0);
-  toggle.textContent = tick ? 'Pause' : (left === 0 ? 'Done' : (left < total ? 'Resume' : 'Start'));
+  toggle.textContent = loop ? 'Pause' : (left === 0 ? 'Done' : (left < total ? 'Resume' : 'Start'));
+  swEnd.setAttribute('aria-pressed', endOn);
+  swTick.setAttribute('aria-pressed', tickOn);
 }
 function start() {
-  if (tick || left === 0) return;
-  endAt = Date.now() + left * 1000;            // uses the clock, so it stays accurate if the tab is throttled
-  tick = setInterval(() => {
-    left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
-    if (left === 0) { stop(); beep(); }
+  if (loop || left === 0) return;
+  audio();
+  endAt = Date.now() + left * 1000;     // follows the real clock, so it stays accurate if the tab is throttled
+  loop = setInterval(() => {
+    left = Math.ceil(msLeft() / 1000);
+    if (left === 0) { stop(); endAlarm(); }
     render();
-  }, 250);
+  }, 100);
+  tickLoop();
   render();
 }
-function stop() { clearInterval(tick); tick = null; render(); }
-function reset() { stop(); left = total; render(); }
-function beep() {
-  if (!sound) return;
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [0, 0.35, 0.7].forEach(t => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
-      g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.25);
-      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.3);
-    });
-  } catch (e) {}
+function stop() {
+  if (loop) left = Math.ceil(msLeft() / 1000);
+  clearInterval(loop); loop = null; clearTimeout(tickTimer); tickTimer = null; endAt = null; render();
 }
-toggle.onclick = () => tick ? stop() : start();
+function reset() { stop(); left = total; render(); }
+
+toggle.onclick = () => loop ? stop() : start();
 document.getElementById('reset').onclick = reset;
+swEnd.onclick  = () => { endOn = !endOn; audio(); render(); };
+swTick.onclick = () => { tickOn = !tickOn; audio(); render(); };
 document.addEventListener('keydown', e => {
-  if (e.code === 'Space') { e.preventDefault(); tick ? stop() : start(); }
+  if (e.code === 'Space') { e.preventDefault(); loop ? stop() : start(); }
   if (e.key === 'r' || e.key === 'R') reset();
 });
 render();
