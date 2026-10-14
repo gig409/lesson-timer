@@ -145,7 +145,8 @@
     theme=dark | clear   (clear = transparent background)
     compact=1        always use the small icon-only buttons
     auto=1           start counting as soon as the page loads
-  Keyboard (after clicking the timer): Space = start/pause, R = reset
+    id=q1            a unique name for this timer; use it when two slides share the same settings
+  Keyboard (when opened on its own, not embedded): Space = start/pause, R = reset
 */
 const q = new URLSearchParams(location.search);
 const total = Math.max(1, Math.round((parseFloat(q.get('m')) || 0) * 60 + (parseFloat(q.get('s')) || 0)) || 300);
@@ -215,6 +216,7 @@ function tickLoop() {
   const k = Math.round(ms / 1000);
   let target;
   if (k >= 1 && Math.abs(ms - k * 1000) < 60) {
+    left = k; render();                       // keep the clock in step with the beep
     if (tickOn) playTone();
     target = (k - 1) * 1000;
   } else {
@@ -238,34 +240,67 @@ function render() {
   swEnd.setAttribute('aria-pressed', endOn);
   swTick.setAttribute('aria-pressed', tickOn);
 }
-function start() {
+function start(resumeEndAt) {
   if (loop || left === 0) return;
   audio();
-  endAt = Date.now() + left * 1000;     // follows the real clock, so it stays accurate if the tab is throttled
+  endAt = resumeEndAt || Date.now() + left * 1000;   // follows the real clock, so it stays accurate if the tab is throttled
   loop = setInterval(() => {
     left = Math.ceil(msLeft() / 1000);
     if (left === 0) { stop(); endAlarm(); }
     render();
   }, 100);
   tickLoop();
-  render();
+  render(); save();
 }
 function stop() {
   if (loop) left = Math.ceil(msLeft() / 1000);
-  clearInterval(loop); loop = null; clearTimeout(tickTimer); tickTimer = null; endAt = null; render();
+  clearInterval(loop); loop = null; clearTimeout(tickTimer); tickTimer = null; endAt = null; render(); save();
 }
-function reset() { stop(); left = total; render(); }
+function reset() { stop(); left = total; render(); save(); }
+
+/* ---------- survive reloads ----------
+   slides.com / reveal.js unloads an iframe when you leave its slide and reloads it when you
+   come back. Keep the timer's state in this tab's session storage so it carries on. */
+const KEY = 'lesson-timer:' + (q.get('id') || location.search);
+function save() {
+  try {
+    const fresh = !loop && left === total;
+    sessionStorage.setItem(KEY, JSON.stringify({ left, endAt: loop ? endAt : null, endOn, tickOn, fresh, at: Date.now() }));
+  } catch (e) {}
+}
+function restore() {
+  let st;
+  try { st = JSON.parse(sessionStorage.getItem(KEY)); } catch (e) {}
+  if (!st) return false;
+  endOn = st.endOn; tickOn = st.tickOn;
+  if (st.endAt) {                                    // it was running
+    const ms = st.endAt - Date.now();
+    if (ms > 0) { left = Math.ceil(ms / 1000); start(st.endAt); return true; }
+    if (-ms < 5 * 60e3) { left = 0; render(); return true; }   // finished while you were away
+    left = total; render(); save(); return true;      // finished long ago: start fresh
+  }
+  if (!st.fresh && Date.now() - st.at < 3 * 3600e3) left = Math.min(total, Math.max(0, st.left));
+  render(); return true;
+}
 
 toggle.onclick = () => loop ? stop() : start();
 document.getElementById('reset').onclick = reset;
-swEnd.onclick  = () => { endOn = !endOn; audio(); render(); };
-swTick.onclick = () => { tickOn = !tickOn; audio(); render(); };
+swEnd.onclick  = () => { endOn = !endOn; audio(); render(); save(); };
+swTick.onclick = () => { tickOn = !tickOn; audio(); render(); save(); };
 document.addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); loop ? stop() : start(); }
   if (e.key === 'r' || e.key === 'R') reset();
 });
+document.addEventListener('pointerdown', audio);   // unlock sound on any click after a reload
+/* After a button press, hand keyboard focus back to the slides so the clicker / arrow keys
+   keep moving slides (and Space doesn't pause the timer by accident). */
+const embedded = window.parent !== window;
+document.addEventListener('click', e => {
+  if (!embedded || !e.target.closest('button')) return;
+  setTimeout(() => { try { document.activeElement.blur(); window.parent.focus(); } catch (err) {} }, 0);
+});
 render();
-if (q.get('auto') === '1') start();
+if (!restore() && q.get('auto') === '1') start();
 </script>
 </body>
 </html>
