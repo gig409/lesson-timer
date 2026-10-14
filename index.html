@@ -276,8 +276,9 @@ function restore() {
   if (st.endAt) {                                    // it was running
     const ms = st.endAt - Date.now();
     if (ms > 0) { left = Math.ceil(ms / 1000); start(st.endAt); return true; }
-    if (-ms < 5 * 60e3) { left = 0; render(); return true; }   // finished while you were away
-    left = total; render(); save(); return true;      // finished long ago: start fresh
+    if (-ms < 60e3) { left = 0; render(); return true; }   // finished moments ago: show 0:00
+    left = total; render(); save(); return true;      // finished earlier: start fresh (so a later slide
+                                                       // with the same settings isn't stuck on 0:00)
   }
   if (!st.fresh && Date.now() - st.at < 3 * 3600e3) left = Math.min(total, Math.max(0, st.left));
   render(); return true;
