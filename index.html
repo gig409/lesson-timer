@@ -146,6 +146,8 @@
     compact=1        always use the small icon-only buttons
     auto=1           start counting as soon as the page loads
     id=q1            a unique name for this timer; use it when two slides share the same settings
+    update=1m        show the time in whole steps (1m or 30s) instead of every second,
+                     e.g. 5:00, 4:00, 3:00, 2:00, 1:00, then every second from 0:30
   Keyboard (when opened on its own, not embedded): Space = start/pause, R = reset
 */
 const q = new URLSearchParams(location.search);
@@ -157,6 +159,11 @@ if (q.get('compact') === '1') document.documentElement.classList.add('compact');
 if (q.get('theme')) document.documentElement.dataset.theme = q.get('theme');
 if (q.get('label')) { label.textContent = q.get('label'); label.hidden = false; document.title = q.get('label') + ' timer'; }
 tickLbl.textContent = `Last ${tickFrom}s countdown`;
+/* update=1m or update=30s: the clock moves in steps, then counts every second near the end */
+const step = (u => /^(1m|1min|60s?|1:00)$/.test(u) ? 60 : /^(30s?|0:30|0\.5m)$/.test(u) ? 30 : 0)
+  ((q.get('update') || '').trim().toLowerCase());
+const detailFrom = Math.max(30, tickFrom);     // every second from 0:30 (or when the beeps start)
+const shown = () => step && left > detailFrom ? Math.min(total, Math.ceil(left / step) * step) : left;
 
 let left = total, endAt = null, loop = null, tickTimer = null, ctx = null;
 const fmt = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
@@ -228,8 +235,8 @@ function tickLoop() {
 
 /* ---------- timer ---------- */
 function render() {
-  time.textContent = fmt(left);
-  fill.style.width = (msLeft() / (total * 1000) * 100) + '%';
+  time.textContent = fmt(shown());
+  fill.style.width = (step && left > detailFrom ? shown() / total : msLeft() / (total * 1000)) * 100 + '%';
   wrap.classList.toggle('warn', left > 0 && left <= Math.min(Math.max(tickFrom, 60), total * 0.25 || 60));
   wrap.classList.toggle('done', left === 0);
   const word = loop ? 'Pause' : (left === 0 ? 'Done' : (left < total ? 'Resume' : 'Start'));
